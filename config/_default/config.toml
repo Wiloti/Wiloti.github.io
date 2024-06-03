@@ -1,5 +1,5 @@
 # Change baseurl before deploy
-baseurl = "https://wiloti.fr"
+baseurl = "http://www.wiloti.fr"
 languageCode = "en-us"
 paginate = 10
 title = "Blog | Wiloti"
