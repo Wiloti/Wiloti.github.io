@@ -2,5 +2,12 @@
 [en]
 languageName = "English"
 languagedirection = "ltr"
-title = "Example Site"
+title = "Wiloti"
 weight = 1
+
+
+[fr]
+languageName = "Français"
+languagedirection = "ltr"
+title = "Wiloti"
+weight = 2

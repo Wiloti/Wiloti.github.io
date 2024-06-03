@@ -10,15 +10,23 @@
 [[social]]
 identifier = "github"
 name = "GitHub"
-url = "https://github.com/CaiJimmy/hugo-theme-stack"
+url = "https://github.com/wiloti"
 
 [social.params]
 icon = "brand-github"
 
 [[social]]
-identifier = "twitter"
-name = "Twitter"
-url = "https://twitter.com"
+identifier = "hackthebox"
+name = "Hack The Box"
+url = "https://app.hackthebox.com/users/618895"
 
 [social.params]
-icon = "brand-twitter"
+icon = "cube"
+
+[[social]]
+identifier = "rootme"
+name = "Root Me"
+url = "https://www.root-me.org/Wiloti?lang=en"
+
+[social.params]
+icon = "skull"
