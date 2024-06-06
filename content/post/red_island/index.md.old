@@ -1,7 +1,7 @@
 ---
 title: Red Island
 slug: red_island
-date: 2024-06-06 00:00:00+0000
+date: 2024-06-05 00:00:00+0000
 image: cover.png 
 categories:
     - Write-ups
@@ -13,7 +13,7 @@ tags:
 
 # TL;DR
 
-The `api/red/generate` endpoint is vulnerable to **SSRF** attack, where the request is processed by *node-libcurl*. This library can be utilize multiple protocols, which come in handy to investigate the current running process.
+The `/generate` endpoint is vulnerable to **SSRF** attack, where the request is processed by *node-libcurl*. This library can be utilize multiple protocols, which come in handy to investigate the current running process.
 - `file:///proc/self/cmdline`
 - `file:///proc/self/pwd/index.js`
 
@@ -107,7 +107,7 @@ In this application, *Redis* is used for *session storage* with `redisClient.con
 
 I am aware that *Redis* implements [gopher](https://en.wikipedia.org/wiki/Gopher_(protocol)), which was an alternative to the [World Wide Web](https://en.wikipedia.org/wiki/World_Wide_Web) in the late 90's.
 
-Given that *node-libcurl* supports multiple protocols for **SSRF**, and *gopher* can be used to communicate with the *Redis* client, I performed a **Cross-Protocol Scripting** attack using the `gopher://` scheme.
+Given that *node-libcurl* supports multiple protocols for **SSRF**, and gopher can be used to communicate with the *Redis* client, I performed a **Cross-Protocol Scripting** attack using the `gopher://` scheme.
 
 ![URI](/red_island/screenshots/uri_gopher.png)
 
@@ -152,7 +152,7 @@ A search for vulnerabilities in this specific version of *Redis* (5.0.7) led me 
 
 ### Why?
 
-This vulnerability does not originate directly from *Redis*. On specific distributions, *Lua* is loaded dynamically, which allowed me to perform a **Remote Code Execution** on the host by escaping the *Lua* sandbox.
+This vulnerability does not originate directly from *Redis*. On specific distributions, *Lua* is loaded dynamically, which allowed me to perform a **Remote Code Execution** (RCE) on the host by escaping the *Lua* sandbox.
 
 > This vulnerability existed because the Lua library in Debian/Ubuntu is provided as a dynamic library. A package variable was automatically populated that in turn permitted access to arbitrary Lua functionality.
 > - <cite>Vulhub GitHub: *Redis Lua Sandbox Escape and Remote Code Execution (CVE-2022-0543)*</cite>
