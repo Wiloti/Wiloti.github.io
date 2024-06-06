@@ -6,7 +6,7 @@ favicon = "/favicon.ico"
 
 [footer]
 since = 2024
-customText = ""
+customText = "Background provided by <b><a href='https://backgrnd.site/'>backgrnd</a><b>"
 
 [dateFormat]
 published = "Jan 02, 2006"
