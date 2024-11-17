@@ -18,7 +18,7 @@ icon = "brand-github"
 [[social]]
 identifier = "hackthebox"
 name = "Hack The Box"
-url = "https://app.hackthebox.com/users/618895"
+url = "https://app.hackthebox.com/profile/618895"
 
 [social.params]
 icon = "cube"
